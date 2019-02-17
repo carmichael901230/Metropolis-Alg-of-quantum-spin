@@ -4,13 +4,15 @@ import java.lang.Math;
 class Configuration {
     public int N=100;          // Number of spins
     public double B, C, T;
-    int[] sigma;
+    public static int Nf;          // perform Nf*N flips 
+    public int[] sigma;
     
-    public Configuration(int N, double B, double C, double T) {
+    public Configuration(int N, double B, double C, double T, int Nf) {
         this.N = N;
         this.B = B;
         this.C = C;
         this.T = T;
+        Configuration.Nf = Nf;
 
         if (C>=0) {
             this.sigma = new int[this.N];
@@ -58,10 +60,8 @@ class Configuration {
     // return sigma difference between newSigma and oldSigma
     public double calcSigmaDiff(int i) {
         // calculate delta B and C
-        int deltaB = this.sigma[i]*-2;
-        int deltaC = -2*(this.sigma[(i-1+this.N)%this.N]*this.sigma[i]+this.sigma[i]*this.sigma[(i+1)%this.N]);
-        System.out.println("dB: "+deltaB);  //test
-        System.out.println("dC: "+deltaC);  //test
+        double deltaB = this.sigma[i]*2.0;
+        double deltaC = 2.0*(this.sigma[(i-1+this.N)%this.N]*this.sigma[i]+this.sigma[i]*this.sigma[(i+1)%this.N]);
         return this.B*deltaB+this.C*deltaC;
     }
 
@@ -70,48 +70,51 @@ class Configuration {
         return Math.exp((-1 * diff) / this.T);
     }
 
-    // Wrapped function
+    // Wrapped function, flip Nf*N times
     // 1) generate a sigma configuration
     // 2) calculate delta energy
-    // 3) calculate p
-    // 4) compare with random number r and update sigma configuration
-    public void updateCurrentSigma() {
-        // Random generate an index
-        int index = ThreadLocalRandom.current().nextInt(this.N);
-        System.out.println("random index: "+index);     // test
-        // Generate new sigma by flip [index] spin
-        int[] newSigma = this.createNewSigma(index);
-        // calculate delta energy
-        double deltaE = this.calcSigmaDiff(index);
-        System.out.println("Delta E: "+ deltaE);    //test
-        // Apply Metropolis Alg
-        if (deltaE < 0){
-            this.sigma = newSigma.clone();
-        }
-        else {
-            double p = this.computeP(deltaE);
-            double r = ThreadLocalRandom.current().nextDouble(1.0);
-            System.out.println("p: "+p);    // test
-            System.out.println("random r: "+ r);  //test
-            if (r < p) {
-                this.sigma = newSigma.clone();
+    // 3) calculate p and compare with random number r
+    // 4) update sigma configuration
+    public void flipSigma() {
+        int[] newSigma;
+        for (int i=0; i<Configuration.Nf*this.N; i++) {
+            // Random generate an index
+            int index = ThreadLocalRandom.current().nextInt(this.N);
+            // Generate new sigma by flip [index] spin
+            newSigma = this.createNewSigma(index);
+            // calculate delta energy
+            double deltaE = this.calcSigmaDiff(index);
+            // Apply Metropolis Alg
+            if (deltaE < 0){
+                this.sigma = newSigma;
+            }
+            else {
+                double p = this.computeP(deltaE);
+                double r = ThreadLocalRandom.current().nextDouble(1.0);
+                if (r < p) {
+                    this.sigma = newSigma;
+                }
             }
         }
-        newSigma = null;           // wait for garbage collection
     }
 
     public double computeM() {
         int sum = 0;
-        for (int e : this.sigma) {
-            sum += e;
+        for (int i=0; i<this.N; i++) {
+            sum += this.sigma[i];
         }
         return sum*1.0/this.N;
     }
     public double computeCp() {
         int sum = 0;
-        for (int i=0; i<this.sigma.length; i++) {
+        for (int i=0; i<this.N; i++) {
             sum += this.sigma[i]*this.sigma[(i+1)%this.N];
         }
         return sum*1.0/this.N;
+    }
+
+    public static double computeCpStar(){
+        double C=-1.0, T=1.9;
+        return (Math.exp(C/T)-Math.exp(-1*C/T)) / (Math.exp(C/T)+Math.exp(-1*C/T));
     }
 }
